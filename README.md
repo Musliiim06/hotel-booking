@@ -1,4 +1,4 @@
-# Hotel Booking & Reservation System 🏨
+# Hotel Booking & Reservation System 
 
 A robust hotel booking engine built with **Node.js**, **Express**, **PostgreSQL**, and **Stripe API**. 
 
