@@ -10,8 +10,9 @@ const pool = new Pool({
 });
 
 pool.connect()
-    .then(() => {
+    .then((client) => {
         console.log('Connected to the database');
+        client.release();
     })
     .catch((err) => {
         console.error('Error connecting to the database', err);

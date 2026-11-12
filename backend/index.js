@@ -11,6 +11,9 @@ const app = experss();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 app.use(cors({ origin: process.env.CLIENT_URL }));
 
+
+
+
 app.post("/webhook", experss.raw({ type: "application/json" }), async (req, res) => {
     let event;
     if (process.env.STRIPE_WEBHOOK_SECRET) {
@@ -26,10 +29,18 @@ app.post("/webhook", experss.raw({ type: "application/json" }), async (req, res)
     switch (event.type) {
         case "checkout.session.completed":
             const session = event.data.object;
+            const result = await db.query()
+
+            
+            return res.status(200).json({ message: "Webhook received", user, startDate, endDate, rooms });
+            
+
+           
             console.log("Payment successful!", session);
             break;
         case "checkout.session.async_payment_succeeded":
             const asyncSession = event.data.object;
+
             console.log("Async payment succeeded!", asyncSession);
             break;
         case "checkout.session.async_payment_failed":
@@ -82,7 +93,7 @@ async function findfreeRooms(startDate, endDate) {
 }
 
 
-async function createBooking(startDate, endDate, rooms) {
+async function createBooking(userId, startDate, endDate, rooms) {
     const client = await db.connect();
 
     try {
@@ -139,10 +150,10 @@ async function createBooking(startDate, endDate, rooms) {
 
                 const booking = await client.query(
                     `INSERT INTO bookings
-                        (room_id, check_in, check_out, total_price)
-                     VALUES ($1, $2, $3, $4)
-                     RETURNING room_id, check_in, check_out, total_price`,
-                    [room.id, startDate, endDate, totalPrice]
+                        (room_id, user_id, check_in, check_out, total_price)
+                     VALUES ($1, $2, $3, $4, $5)
+                     RETURNING user_id, room_id, check_in, check_out, total_price`,
+                    [room.id, userId, startDate, endDate, totalPrice]
                 );
 
                 createdBookings.push(booking.rows[0]);
@@ -178,7 +189,7 @@ async function createUser(user) {
     const result = await db.query(
         `INSERT INTO users (full_name, email, phone)
          VALUES ($1, $2, $3)
-         RETURNING full_name, email, phone`,
+         RETURNING *`,
         [full_name, email, phone]
     );
     if (result.rows.length === 0) {
@@ -187,6 +198,40 @@ async function createUser(user) {
     }
     return result.rows[0];
 }
+
+async function verifyRecaptcha(req, res, next) {
+    try {
+        const {recaptchaToken} = req.body;
+        if (!recaptchaToken) {
+            return res.status(403).json({ error: "reCAPTCHA token is required" });
+        }
+        const response = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: new URLSearchParams({
+                secret: process.env.reCAPTCHA_SECRET_KEY,
+                response: recaptchaToken
+            })
+
+        });
+        const data = await response.json();
+        if (!data.success || data.score < 0.5 || data.action !== "create-checkout-session") {
+            return res.status(403).json({ error: "reCAPTCHA verification failed" });
+        }
+        next();
+    }catch (error) {
+        console.error("Error verifying reCAPTCHA:", error);
+    }
+}
+
+
+
+
+
+
+
 
 
 app.get("/api/available-rooms", async (req, res) => {
@@ -222,10 +267,8 @@ app.post("/api/create-checkout-session", async (req, res) => {
 
     try{
         const createuser = await createUser(user);
-        const createbooking = await createBooking(startDate, endDate, rooms);
-
-        // res.json({ createuser, createbooking });
-
+        const userId = createuser.id;
+        const createbooking = await createBooking(userId, startDate, endDate, rooms);
 
         const totalPrice = Object.values(createbooking).reduce((total, booking) => total + Number(booking.total_price), 0);
 
@@ -238,12 +281,20 @@ app.post("/api/create-checkout-session", async (req, res) => {
                         currency: "usd",
                         product_data: {
                             name: `Booking from ${startDate} to ${endDate}`,
+                            metadata: {
+                                user: JSON.stringify(user),
+                                startDate: startDate,
+                                endDate: endDate,
+                                rooms: JSON.stringify(rooms),
+                            }
                         },
                         unit_amount: Math.round(totalPrice * 100), 
                     },
                     quantity: 1,
                     }
                 ],
+                expires_at: Math.floor(Date.now() / 1000) + 3600,   
+
                 mode: "payment",
                 success_url: `${process.env.CLIENT_URL}/success`,
                 cancel_url: `${process.env.CLIENT_URL}/cancel`,
@@ -257,7 +308,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
 
 
     } catch (error) {
-        res.status(500).json({error: error.message});
+        res.status(500).json({error:  "Something went wrong"});
     }
 })
 
@@ -284,4 +335,3 @@ app.post("/api/create-checkout-session/v2", async (req, res) => {
 app.listen(process.env.PORT, () => {
     console.log(`Server is running on port ${process.env.PORT}`);
 })
-app
