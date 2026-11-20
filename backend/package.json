@@ -1,13 +1,19 @@
 {
-  "name": "backend",
+  "name": "hotel-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Hotel reservation engine with PostgreSQL, Express, and Stripe",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
   },
-  "keywords": [],
+  "keywords": [
+    "hotel",
+    "booking",
+    "stripe",
+    "postgres",
+    "express"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",

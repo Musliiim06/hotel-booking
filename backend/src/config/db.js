@@ -1,5 +1,8 @@
 const { Pool } = require('pg');
-require('dotenv').config();
+const path = require('path');
+
+// Ensure .env is resolved correctly regardless of current working directory
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 const pool = new Pool({
     user: process.env.DB_USER || 'postgres',
@@ -11,11 +14,11 @@ const pool = new Pool({
 
 pool.connect()
     .then((client) => {
-        console.log('Connected to the database');
+        console.log('Connected to the PostgreSQL database');
         client.release();
     })
     .catch((err) => {
-        console.error('Error connecting to the database', err);
+        console.error('Error connecting to the PostgreSQL database:', err.message);
     });
 
 module.exports = pool;
